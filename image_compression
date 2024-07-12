@@ -1,0 +1,151 @@
+# -*- coding: gbk -*-
+import numpy as np
+import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkinter import filedialog
+from tkinter import scrolledtext
+import os
+import threading
+import sys
+
+def quit_app(root):
+    if messagebox.askokcancel("退出", "确定要退出程序吗？"):
+        root.destroy()
+        os._exit(0)
+        
+class RedirectText(object):   
+    def __init__(self, widget):
+        self.widget = widget
+        self.widget.config(state=tk.NORMAL)
+        self.stdout = sys.stdout
+
+    def write(self, string):
+        self.widget.insert(tk.END, string)
+        self.widget.see(tk.END)
+
+    def flush(self):
+        pass
+    
+def f1():                #展示函数
+
+    file_path = filedialog.askopenfilename()   
+    plt.figure(figsize=(12, 12))
+    plt.rcParams['font.sans-serif'] = 'SimHei' 
+    img = plt.imread(file_path)
+    f1 = plt.subplot(331)  
+    f1.imshow(img, cmap='gray')
+    f1.set_title("原始图片")
+    for i in range(8): 
+        rate = (i + 1) / 10.0  
+        svd(img, i + 2, rate)
+    plt.suptitle('图片SVD效果对比', fontsize=17, y=0.02) 
+    plt.show()
+    
+def svd(img, plotId, rate=0.8):       #压缩函数
+    if len(img.shape) == 3: 
+        zip_img = np.zeros(img.shape)
+        channels = 3        
+    else:  
+        zip_img = np.zeros(img.shape)
+        channels = 1
+    zip_img = np.zeros(img.shape)
+    
+    u_shape = 0
+    sigma_shape = 0
+    vT_shape = 0
+    
+    for channel in range(channels):
+        
+        if channels == 3:
+            u, sigma, v = np.linalg.svd(img[:, :, channel])
+        else:
+            u, sigma, v = np.linalg.svd(img)
+        
+        sigma_i = 0
+        temp = 0
+        
+        while (temp / np.sum(sigma)) < rate: 
+            temp += sigma[sigma_i]
+            sigma_i += 1
+            
+        SigmaMat = np.zeros((sigma_i, sigma_i))        
+        SigmaMat = np.diag(sigma[:sigma_i])
+        
+        if channels == 3:
+            zip_img[:, :, channel] = u[:, 0:sigma_i].dot(SigmaMat).dot(v[0:sigma_i, :])
+        else:
+            zip_img = u[:, 0:sigma_i].dot(SigmaMat).dot(v[0:sigma_i, :])
+            
+        u_shape = u[:, 0:sigma_i].shape
+        sigma_shape = SigmaMat.shape
+        vT_shape = v[0:sigma_i, :].shape 
+        
+    for i in range(3):
+        if channels == 3:
+            MAX = np.max(zip_img[:, :, i])
+            MIN = np.min(zip_img[:, :, i])
+            zip_img[:, :, i] = (zip_img[:, :, i] - MIN) / (MAX - MIN)
+        else:
+            MAX = np.max(zip_img)
+            MIN = np.min(zip_img)
+            zip_img = (zip_img - MIN) / (MAX - MIN)
+
+    zip_img = np.round(zip_img * 255).astype("uint8")
+    if channels == 3:
+        filename = "重建_彩色_{}.jpg".format(plotId-2)
+        plt.imsave(filename, zip_img)
+    else:
+        filename = "重建_灰度_{}.jpg".format(plotId-2)
+        plt.imsave(filename, zip_img, cmap='gray')
+    
+    if channels == 3:
+        zip_rate = (img.size - 3 * (u_shape[0] * u_shape[1] + sigma_shape[0] * sigma_shape[1] + vT_shape[0] * vT_shape[1])) / (zip_img.size)
+    else:
+        zip_rate = (img.size - (u_shape[0] * u_shape[1] + sigma_shape[0] * sigma_shape[1] + vT_shape[0] * vT_shape[1])) / (zip_img.size)
+    f = plt.subplot(3, 3, plotId)
+    f.imshow(zip_img, cmap='gray')
+    f.set_title("SVD压缩率 %.4f,奇异值数量：%d" % (zip_rate, sigma_i))
+
+    print("设置的压缩率：", rate)
+    print("使用的奇异值数量：", sigma_i)
+    print("原始图片大小：", img.shape)
+    print("压缩后用到的矩阵大小：{}x({}+{}+{})".format(channels, u_shape, sigma_shape, vT_shape))
+    print("压缩率为：", zip_rate)
+    print("")
+
+def configureUserInterface():         #交互界面
+    root = tk.Tk()
+    root.title("选择图片进行压缩，图片需为.jpg格式")
+
+    root.geometry("800x400")
+    root.eval('tk::PlaceWindow . center')
+
+    style = ttk.Style(root)
+    if os.name == 'nt':
+        style.theme_use('vista')
+    else:
+        style.theme_use('clam')
+
+    button_frame = ttk.Frame(root)
+    button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=10)
+
+    generate_button = ttk.Button(button_frame, text="选择文件", command=lambda: f1())
+    generate_button.pack(side=tk.LEFT, padx=20)
+
+    quit_button = ttk.Button(button_frame, text="退出程序", command=lambda: quit_app(root))
+    quit_button.pack(side=tk.RIGHT, padx=20)
+    
+    text_frame = ttk.Frame(root)
+    text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+    text_area = scrolledtext.ScrolledText(text_frame, wrap=tk.WORD, width=60, height=20)
+    text_area.pack(fill=tk.BOTH, expand=True)
+
+    redirect_text = RedirectText(text_area)
+    sys.stdout = redirect_text
+    
+    return root
+if __name__ == '__main__':
+    root = configureUserInterface()
+    root.mainloop()
