@@ -1,2 +1,0 @@
-# image-compression-
-image compression 
